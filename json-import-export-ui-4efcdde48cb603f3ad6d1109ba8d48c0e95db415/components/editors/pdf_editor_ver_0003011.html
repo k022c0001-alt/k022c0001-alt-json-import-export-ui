@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PDF Editor — Hide-Element Configurator</title>
+  <link rel="stylesheet" href="../../css/pdf_style.css" />
+</head>
+<body>
+
+<div class="pdf_editor_container">
+
+  <div class="pdf_editor_header">
+    <span style="font-size:1.6rem;">⚙️</span>
+    <h1>PDF Editor — Hide-Element Configurator</h1>
+    <a href="../pdf_body_ver_0003011.html" class="pdf_back_link">← Back to PDF Body</a>
+  </div>
+
+  <p style="font-size:0.875rem; color:#666; margin-bottom:16px;">
+    Select elements to hide when printing/exporting as PDF.
+    The panel uses two detection methods: <strong>CSS-rule analysis</strong> (selectors that
+    already have <code>display:none</code> in stylesheets) and <strong>smart DOM detection</strong>
+    (buttons, forms, toolbars, modals, and other interactive elements).
+  </p>
+
+  <!-- Preview notice -->
+  <div class="pdf_preview_active_notice" id="pe_preview_notice">
+    ⚠ Preview mode is active — some elements are temporarily hidden.
+    <button class="pdf_btn pdf_btn_secondary" style="padding:3px 10px; font-size:0.8rem;" onclick="pe_clearPreview()">Clear Preview</button>
+  </div>
+
+  <!-- Config panel (populated by JS) -->
+  <div class="pdf_config_panel">
+    <h2>🔍 Detected Elements</h2>
+    <div id="pe_config_container" class="pdf_config_section">
+      <p style="color:#888; font-size:0.875rem;">Analysing page…</p>
+    </div>
+  </div>
+
+  <!-- Custom selector -->
+  <div class="pdf_config_panel" style="padding-top:14px;">
+    <h2>✏ Add Custom CSS Selector</h2>
+    <div class="pdf_custom_selector_row">
+      <input
+        type="text"
+        id="pe_custom_input"
+        class="pdf_custom_selector_input"
+        placeholder=".my-class, #my-id, button.toolbar-btn"
+      />
+      <button class="pdf_btn pdf_btn_secondary" onclick="pe_addCustomSelector()">Add</button>
+    </div>
+    <div id="pe_custom_list" style="margin-top:8px;"></div>
+  </div>
+
+  <!-- Action buttons -->
+  <div class="pdf_editor_actions">
+    <button class="pdf_btn pdf_btn_primary" onclick="pe_applyPreview()">👁 Preview</button>
+    <button class="pdf_btn pdf_btn_config" onclick="pe_exportPDF()">🖨 Export / Print</button>
+    <button class="pdf_btn pdf_btn_secondary" onclick="pe_saveConfig()">💾 Save Config</button>
+    <button class="pdf_btn pdf_btn_danger" onclick="pe_clearPreview()">✕ Clear Preview</button>
+  </div>
+
+  <div class="pdf_status" id="pe_status"></div>
+
+</div>
+
+<!-- Load the hybrid detection library -->
+<script src="../../js/pdf_config.js"></script>
+
+<script>
+(function () {
+  'use strict';
+
+  const configContainer = document.getElementById('pe_config_container');
+  const statusEl        = document.getElementById('pe_status');
+  const previewNotice   = document.getElementById('pe_preview_notice');
+  const customInput     = document.getElementById('pe_custom_input');
+  const customList      = document.getElementById('pe_custom_list');
+
+  // Track custom selectors added manually
+  const customSelectors = [];
+
+  // ── Determine target document ────────────────────────────────────────
+  // If opened from pdf_body page (same origin), inspect that page;
+  // otherwise fall back to this document.
+  function getTargetWindow() {
+    try {
+      if (window.opener && window.opener.location.origin === window.location.origin) {
+        return window.opener;
+      }
+    } catch (_) { /* cross-origin */ }
+    return window;
+  }
+
+  const targetWin = getTargetWindow();
+  const targetDoc = targetWin.document;
+
+  // ── Build panel ──────────────────────────────────────────────────────
+  function init() {
+    pdf_buildConfigPanel(configContainer, targetDoc);
+
+    // Restore previously saved config
+    const raw = sessionStorage.getItem('pdf_print_config');
+    if (raw) {
+      try {
+        const saved = JSON.parse(raw);
+        if (Array.isArray(saved.selectors)) {
+          restoreSelections(saved.selectors);
+        }
+      } catch (_) { /* ignore */ }
+    }
+  }
+
+  function restoreSelections(selectors) {
+    selectors.forEach(sel => {
+      const cb = configContainer.querySelector(`input[value="${CSS.escape(sel)}"]`);
+      if (cb) {
+        cb.checked = true;
+      } else {
+        // Add as custom if not found in panel
+        addCustomEntry(sel);
+      }
+    });
+  }
+
+  // ── Collect all selected selectors ──────────────────────────────────
+  function getAllSelectors() {
+    const fromPanel  = pdf_getSelectedSelectors(configContainer);
+    const fromCustom = customSelectors.filter(s => {
+      const cb = customList.querySelector(`input[data-custom-sel][value="${CSS.escape(s)}"]`);
+      return cb && cb.checked;
+    });
+    return [...new Set([...fromPanel, ...fromCustom])];
+  }
+
+  // ── Preview ──────────────────────────────────────────────────────────
+  window.pe_applyPreview = function () {
+    const selectors = getAllSelectors();
+    if (selectors.length === 0) {
+      showStatus('No selectors selected.', 'info');
+      return;
+    }
+    pdf_applyPreview(selectors, targetDoc);
+    previewNotice.classList.add('pdf_visible');
+    showStatus(`Preview: ${selectors.length} selector(s) hidden.`, 'success');
+  };
+
+  window.pe_clearPreview = function () {
+    pdf_removePreview(targetDoc);
+    previewNotice.classList.remove('pdf_visible');
+    showStatus('Preview cleared.', 'info');
+  };
+
+  // ── Save config to session ───────────────────────────────────────────
+  window.pe_saveConfig = function () {
+    const selectors = getAllSelectors();
+    pdf_saveConfigToSession(selectors);
+    showStatus(`Config saved: ${selectors.length} selector(s).`, 'success');
+  };
+
+  // ── Export / Print ───────────────────────────────────────────────────
+  window.pe_exportPDF = function () {
+    const selectors = getAllSelectors();
+    pdf_saveConfigToSession(selectors);
+    // Remove preview styles (print media query will handle hiding)
+    pdf_removePreview(targetDoc);
+    previewNotice.classList.remove('pdf_visible');
+    // Print the target window (body page) or this page if no opener
+    pdf_exportWithConfig(selectors, targetWin);
+    showStatus('Print dialog opened.', 'success');
+  };
+
+  // ── Custom selectors ─────────────────────────────────────────────────
+  window.pe_addCustomSelector = function () {
+    const raw = customInput.value.trim();
+    if (!raw) return;
+    // Support comma-separated selectors
+    raw.split(',').map(s => s.trim()).filter(Boolean).forEach(sel => {
+      if (!customSelectors.includes(sel)) {
+        addCustomEntry(sel);
+      }
+    });
+    customInput.value = '';
+  };
+
+  function addCustomEntry(sel) {
+    if (!customSelectors.includes(sel)) {
+      customSelectors.push(sel);
+    }
+
+    const label = document.createElement('label');
+    label.className = 'pdf_checkbox_label';
+    label.style.marginBottom = '4px';
+
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = sel;
+    cb.checked = true;
+    cb.dataset.customSel = '1';
+
+    const span = document.createElement('span');
+    span.className = 'pdf_selector_text';
+    span.textContent = sel;
+
+    const badge = document.createElement('span');
+    badge.className = 'pdf_reason_badge pdf_reason_css';
+    badge.textContent = 'custom';
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.textContent = '✕';
+    removeBtn.style.cssText = 'background:none;border:none;cursor:pointer;color:#e63946;font-size:0.9rem;padding:0 4px;';
+    removeBtn.title = 'Remove';
+    removeBtn.addEventListener('click', () => {
+      const idx = customSelectors.indexOf(sel);
+      if (idx !== -1) customSelectors.splice(idx, 1);
+      label.remove();
+    });
+
+    label.appendChild(cb);
+    label.appendChild(span);
+    label.appendChild(badge);
+    label.appendChild(removeBtn);
+    customList.appendChild(label);
+  }
+
+  // ── Allow Enter key in custom input ─────────────────────────────────
+  customInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') pe_addCustomSelector();
+  });
+
+  // ── Helpers ──────────────────────────────────────────────────────────
+  function showStatus(msg, type) {
+    statusEl.textContent = msg;
+    statusEl.className = `pdf_status pdf_status_show pdf_status_${type}`;
+    clearTimeout(statusEl._timer);
+    statusEl._timer = setTimeout(() => { statusEl.className = 'pdf_status'; }, 5000);
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

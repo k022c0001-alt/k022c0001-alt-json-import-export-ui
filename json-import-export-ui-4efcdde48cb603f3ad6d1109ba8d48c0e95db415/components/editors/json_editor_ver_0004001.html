@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JSON Editor</title>
+  <link rel="stylesheet" href="../../css/json_style.css" />
+</head>
+<body>
+
+<div class="json_editor_container">
+
+  <div class="json_editor_header">
+    <span style="font-size:1.6rem;">✏️</span>
+    <h1>JSON Editor</h1>
+    <a href="../json_body_ver_0004001.html" class="json_back_link">← Back to JSON Body</a>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="json_toolbar" style="margin-bottom:12px;">
+    <button class="json_btn json_btn_primary" onclick="je_validate()">✔ Validate JSON</button>
+    <button class="json_btn json_btn_success" onclick="je_download()">⬇ Download JSON</button>
+    <button class="json_btn json_btn_secondary" onclick="je_applyToBody()">↩ Apply to Body</button>
+    <button class="json_btn json_btn_secondary" onclick="je_formatJSON()">⊞ Format / Prettify</button>
+  </div>
+
+  <!-- Validation result -->
+  <div id="je_validation_result" style="margin-bottom:8px;font-size:0.875rem;min-height:1.2em;"></div>
+
+  <!-- Textarea -->
+  <textarea
+    id="je_textarea"
+    class="json_textarea"
+    spellcheck="false"
+    placeholder="JSON will appear here…"
+  ></textarea>
+
+  <div class="json_status" id="je_status"></div>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  const textarea   = document.getElementById('je_textarea');
+  const validEl    = document.getElementById('je_validation_result');
+  const statusEl   = document.getElementById('je_status');
+
+  // ── Load content from sessionStorage ───────────────────────────────
+  function init() {
+    const content = sessionStorage.getItem('json_editor_content') || '[]';
+    textarea.value = content;
+  }
+
+  // ── Validate ────────────────────────────────────────────────────────
+  window.je_validate = function () {
+    try {
+      JSON.parse(textarea.value);
+      validEl.textContent = '✔ Valid JSON';
+      validEl.className = 'json_validation_ok';
+      showStatus('JSON is valid.', 'success');
+    } catch (err) {
+      validEl.textContent = '✖ Invalid JSON: ' + err.message;
+      validEl.className = 'json_validation_error';
+      showStatus('Validation failed.', 'error');
+    }
+  };
+
+  // ── Format / Prettify ───────────────────────────────────────────────
+  window.je_formatJSON = function () {
+    try {
+      const parsed = JSON.parse(textarea.value);
+      textarea.value = JSON.stringify(parsed, null, 2);
+      validEl.textContent = '✔ Formatted';
+      validEl.className = 'json_validation_ok';
+      showStatus('JSON formatted.', 'success');
+    } catch (err) {
+      validEl.textContent = '✖ Cannot format: ' + err.message;
+      validEl.className = 'json_validation_error';
+      showStatus('Format failed — fix JSON first.', 'error');
+    }
+  };
+
+  // ── Download ────────────────────────────────────────────────────────
+  window.je_download = function () {
+    try {
+      // Validate first
+      JSON.parse(textarea.value);
+    } catch (err) {
+      showStatus('Cannot download — JSON is invalid: ' + err.message, 'error');
+      return;
+    }
+    const blob = new Blob([textarea.value], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = 'export_' + timestamp() + '.json';
+    a.click();
+    URL.revokeObjectURL(url);
+    showStatus('Downloaded.', 'success');
+  };
+
+  // ── Apply back to body (via sessionStorage) ─────────────────────────
+  window.je_applyToBody = function () {
+    try {
+      const parsed = JSON.parse(textarea.value);
+      if (!Array.isArray(parsed)) throw new Error('JSON must be an array.');
+      // Store updated content; body will pick it up on next load
+      sessionStorage.setItem('json_editor_content', textarea.value);
+      // Also update the main handler state
+      if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'object') {
+        const cols = Object.keys(parsed[0]);
+        const rows = parsed.map(obj => cols.map(c => obj[c] !== undefined && obj[c] !== null ? String(obj[c]) : ''));
+        sessionStorage.setItem('json_handler_data', JSON.stringify({ columns: cols, rows }));
+      }
+      showStatus('Applied to body. Reload the body page to see changes.', 'success');
+    } catch (err) {
+      showStatus('Apply failed: ' + err.message, 'error');
+    }
+  };
+
+  // ── Helpers ─────────────────────────────────────────────────────────
+  function showStatus(msg, type) {
+    statusEl.textContent = msg;
+    statusEl.className = `json_status json_status_show json_status_${type}`;
+    clearTimeout(statusEl._timer);
+    statusEl._timer = setTimeout(() => { statusEl.className = 'json_status'; }, 4000);
+  }
+
+  function timestamp() {
+    return new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  }
+
+  // ── Live validation on type ──────────────────────────────────────────
+  textarea.addEventListener('input', () => {
+    try {
+      JSON.parse(textarea.value);
+      validEl.textContent = '✔ Valid';
+      validEl.className = 'json_validation_ok';
+    } catch (_) {
+      validEl.textContent = '✖ Invalid JSON';
+      validEl.className = 'json_validation_error';
+    }
+    // Keep sessionStorage in sync
+    sessionStorage.setItem('json_editor_content', textarea.value);
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

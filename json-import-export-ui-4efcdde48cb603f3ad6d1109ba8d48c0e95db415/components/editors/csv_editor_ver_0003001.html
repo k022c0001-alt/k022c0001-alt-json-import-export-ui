@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CSV Editor</title>
+  <link rel="stylesheet" href="../../css/csv_style.css" />
+</head>
+<body>
+
+<div class="csv_editor_container">
+
+  <div class="csv_editor_header">
+    <span style="font-size:1.6rem;">✏️</span>
+    <h1>CSV Editor</h1>
+    <a href="../csv_body_ver_0003001.html" class="csv_back_link">← Back to CSV Body</a>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="csv_toolbar" style="margin-bottom:12px;">
+    <button class="csv_btn csv_btn_success" onclick="ce_download()">⬇ Download CSV</button>
+    <button class="csv_btn csv_btn_primary" onclick="ce_preview()">👁 Preview Table</button>
+    <button class="csv_btn csv_btn_secondary" onclick="ce_applyToBody()">↩ Apply to Body</button>
+
+    <div class="csv_delimiter_group">
+      <label for="ce_delimiter">Delimiter:</label>
+      <select id="ce_delimiter" class="csv_delimiter_select" onchange="ce_onDelimiterChange()">
+        <option value=","  selected>Comma (,)</option>
+        <option value=";">Semicolon (;)</option>
+        <option value="&#9;">Tab</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Textarea -->
+  <textarea
+    id="ce_textarea"
+    class="csv_textarea"
+    spellcheck="false"
+    placeholder="CSV content will appear here…"
+  ></textarea>
+
+  <!-- Status -->
+  <div class="csv_status" id="ce_status"></div>
+
+  <!-- Preview -->
+  <div id="ce_preview_section" style="display:none; margin-top:16px;">
+    <h3 style="font-size:0.95rem; color:#2d9e4f; margin-bottom:8px;">Preview</h3>
+    <div class="csv_preview_table_wrapper">
+      <table class="csv_preview_table" id="ce_preview_table"></table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  const textarea   = document.getElementById('ce_textarea');
+  const delimSel   = document.getElementById('ce_delimiter');
+  const statusEl   = document.getElementById('ce_status');
+  const previewSec = document.getElementById('ce_preview_section');
+  const previewTbl = document.getElementById('ce_preview_table');
+
+  let delimiter = ',';
+
+  // ── Init ─────────────────────────────────────────────────────────────
+  function init() {
+    const content = sessionStorage.getItem('csv_editor_content') || '';
+    const storedDel = sessionStorage.getItem('csv_editor_delimiter');
+    if (storedDel) {
+      delimiter = storedDel;
+      delimSel.value = storedDel;
+    }
+    textarea.value = content;
+  }
+
+  // ── Delimiter change ─────────────────────────────────────────────────
+  window.ce_onDelimiterChange = function () {
+    delimiter = delimSel.value;
+    sessionStorage.setItem('csv_editor_delimiter', delimiter);
+    if (previewSec.style.display !== 'none') {
+      ce_preview();
+    }
+  };
+
+  // ── CSV parse (minimal) ──────────────────────────────────────────────
+  function parseCSV(text, sep) {
+    const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+    const result = [];
+    for (const line of lines) {
+      if (line.trim() === '') continue;
+      result.push(parseLine(line, sep));
+    }
+    return result;
+  }
+
+  function parseLine(line, sep) {
+    const fields = [];
+    let cur = '';
+    let inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (inQ) {
+        if (ch === '"') {
+          if (line[i + 1] === '"') { cur += '"'; i++; }
+          else inQ = false;
+        } else cur += ch;
+      } else {
+        if (ch === '"') inQ = true;
+        else if (ch === sep) { fields.push(cur); cur = ''; }
+        else cur += ch;
+      }
+    }
+    fields.push(cur);
+    return fields;
+  }
+
+  // ── Preview ──────────────────────────────────────────────────────────
+  window.ce_preview = function () {
+    const rows = parseCSV(textarea.value, delimiter);
+    if (rows.length === 0) {
+      showStatus('Nothing to preview.', 'info');
+      return;
+    }
+
+    previewTbl.innerHTML = '';
+
+    const thead = previewTbl.createTHead();
+    const hrow  = thead.insertRow();
+    rows[0].forEach(col => {
+      const th = document.createElement('th');
+      th.textContent = col;
+      hrow.appendChild(th);
+    });
+
+    const tbody = previewTbl.createTBody();
+    rows.slice(1).forEach(row => {
+      const tr = tbody.insertRow();
+      row.forEach(cell => {
+        const td = tr.insertCell();
+        td.textContent = cell;
+      });
+    });
+
+    previewSec.style.display = 'block';
+    showStatus(`Preview: ${rows.length - 1} data rows.`, 'success');
+  };
+
+  // ── Download ─────────────────────────────────────────────────────────
+  window.ce_download = function () {
+    const text = textarea.value;
+    if (!text.trim()) {
+      showStatus('Nothing to download.', 'error');
+      return;
+    }
+    const blob = new Blob([text], { type: 'text/csv;charset=utf-8;' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = 'export_' + timestamp() + '.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+    showStatus('Downloaded.', 'success');
+  };
+
+  // ── Apply back to body ───────────────────────────────────────────────
+  window.ce_applyToBody = function () {
+    const text = textarea.value;
+    const rows = parseCSV(text, delimiter);
+    if (rows.length === 0) {
+      showStatus('Nothing to apply.', 'error');
+      return;
+    }
+    const columns = rows[0];
+    const dataRows = rows.slice(1).map(row => {
+      const r = [];
+      for (let i = 0; i < columns.length; i++) {
+        r.push(row[i] !== undefined ? row[i] : '');
+      }
+      return r;
+    });
+    sessionStorage.setItem('csv_editor_content', text);
+    sessionStorage.setItem('csv_editor_delimiter', delimiter);
+    sessionStorage.setItem('csv_handler_data', JSON.stringify({ columns, rows: dataRows, delimiter }));
+    showStatus('Applied to body. Reload the body page to see changes.', 'success');
+  };
+
+  // ── Keep session in sync ─────────────────────────────────────────────
+  textarea.addEventListener('input', () => {
+    sessionStorage.setItem('csv_editor_content', textarea.value);
+  });
+
+  // ── Helpers ──────────────────────────────────────────────────────────
+  function showStatus(msg, type) {
+    statusEl.textContent = msg;
+    statusEl.className = `csv_status csv_status_show csv_status_${type}`;
+    clearTimeout(statusEl._timer);
+    statusEl._timer = setTimeout(() => { statusEl.className = 'csv_status'; }, 4000);
+  }
+
+  function timestamp() {
+    return new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
