@@ -1,7 +1,7 @@
 /**
  * pdf_handler.js
- * Handles PDF table editing and printing.
- * PDF configuration (hide-element selector) is in pdf_config.js and used by the editor page.
+ * Handles PDF table editing, CSS loading/editing/downloading, and printing.
+ * Elements with the "no-print" class are hidden at print time via @media print in pdf_style.css.
  */
 
 'use strict';
@@ -15,8 +15,12 @@
   ];
 
   // ── DOM refs ────────────────────────────────────────────────────────
-  const tableEl  = document.getElementById('pdf_table');
-  const statusEl = document.getElementById('pdf_status');
+  const tableEl    = document.getElementById('pdf_table');
+  const statusEl   = document.getElementById('pdf_status');
+  const cssTextarea = document.getElementById('pdf_css_textarea');
+
+  // ── Injected custom CSS style element ───────────────────────────────
+  let injectedStyleEl = null;
 
   // ── Render ──────────────────────────────────────────────────────────
   function render() {
@@ -41,7 +45,7 @@
     });
 
     const thDel = document.createElement('th');
-    thDel.className = 'pdf_row_actions';
+    thDel.className = 'pdf_row_actions no-print';
     hrow.appendChild(thDel);
 
     // Body
@@ -63,7 +67,7 @@
 
       // Delete row
       const tdDel = tr.insertCell();
-      tdDel.className = 'pdf_row_actions';
+      tdDel.className = 'pdf_row_actions no-print';
       const delBtn = document.createElement('button');
       delBtn.className = 'pdf_btn_row_delete';
       delBtn.title = 'Delete row';
@@ -121,34 +125,58 @@
     showStatus(`Column "${name}" added.`, 'success');
   };
 
-  window.pdf_openEditor = function () {
-    saveToSession();
-    window.open('../components/editors/pdf_editor_ver_0003011.html', '_blank');
+  /** Load a CSS file and display it in the textarea. */
+  window.pdf_loadCSS = function (input) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      cssTextarea.value = e.target.result;
+      showStatus(`CSS loaded: ${file.name}`, 'success');
+    };
+    reader.onerror = function () {
+      showStatus('Failed to read CSS file.', 'error');
+    };
+    reader.readAsText(file);
+    // Reset so the same file can be re-selected
+    input.value = '';
   };
 
+  /** Apply the CSS in the textarea to the current page. */
+  window.pdf_applyCSS = function () {
+    const css = cssTextarea.value.trim();
+    if (injectedStyleEl) {
+      injectedStyleEl.textContent = css;
+    } else {
+      injectedStyleEl = document.createElement('style');
+      injectedStyleEl.id = 'pdf_injected_css';
+      injectedStyleEl.textContent = css;
+      document.head.appendChild(injectedStyleEl);
+    }
+    showStatus('CSS applied.', 'success');
+  };
+
+  /** Download the current CSS textarea content as a .css file. */
+  window.pdf_downloadCSS = function () {
+    const css = cssTextarea.value;
+    const blob = new Blob([css], { type: 'text/css' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const ts = new Date().toISOString().slice(0, 16).replace(/[T:]/g, '-');
+    a.download = `pdf_custom_${ts}.css`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 100);
+    showStatus('CSS downloaded.', 'success');
+  };
+
+  /** Print the current page. Elements with .no-print are hidden via @media print CSS. */
   window.pdf_print = function () {
-    // Apply any saved print config before printing
-    const configRaw = sessionStorage.getItem('pdf_print_config');
-    let styleEl = null;
-    if (configRaw) {
-      try {
-        const config = JSON.parse(configRaw);
-        if (Array.isArray(config.selectors) && config.selectors.length > 0) {
-          styleEl = document.createElement('style');
-          let css = '@media print {\n';
-          config.selectors.forEach(sel => {
-            css += `  ${sel} { display: none !important; }\n`;
-          });
-          css += '}\n';
-          styleEl.textContent = css;
-          document.head.appendChild(styleEl);
-        }
-      } catch (_) { /* ignore */ }
-    }
     window.print();
-    if (styleEl) {
-      setTimeout(() => styleEl.remove(), 1500);
-    }
   };
 
   // ── Init ─────────────────────────────────────────────────────────────
