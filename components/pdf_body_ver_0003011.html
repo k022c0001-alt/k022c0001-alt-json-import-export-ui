@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PDF Export</title>
+  <link rel="stylesheet" href="../css/pdf_style.css" />
+</head>
+<body>
+
+<div class="pdf_container">
+
+  <div class="pdf_header">
+    <span style="font-size:1.8rem;">🖨️</span>
+    <h1>PDF Export</h1>
+  </div>
+
+  <!-- Toolbar (will be hidden on print via CSS) -->
+  <div class="pdf_toolbar">
+    <button class="pdf_btn pdf_btn_primary" onclick="pdf_addRow()">＋ Add Row</button>
+    <button class="pdf_btn pdf_btn_secondary" onclick="pdf_addColumn()">＋ Add Column</button>
+    <button class="pdf_btn pdf_btn_config" onclick="pdf_openEditor()">⚙ Configure PDF</button>
+    <button class="pdf_btn pdf_btn_success" onclick="pdf_print()">🖨 Export / Print</button>
+  </div>
+
+  <!-- Table (visible in print) -->
+  <div class="pdf_table_wrapper">
+    <table class="pdf_table" id="pdf_table"></table>
+  </div>
+
+  <!-- Status -->
+  <div class="pdf_status" id="pdf_status"></div>
+
+</div>
+
+<script src="../js/pdf_handler.js"></script>
+</body>
+</html>
