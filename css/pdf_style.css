@@ -323,13 +323,64 @@
   border-color: #e85d04;
 }
 
-/* Print media — hide pdf_ toolbar + controls when printing */
+/* CSS Editor panel */
+.pdf_css_panel {
+  background: #fff8f4;
+  border: 1px solid #f2ddd0;
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.pdf_css_panel_header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-weight: 600;
+  color: #e85d04;
+}
+
+.pdf_css_panel_actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pdf_css_textarea {
+  width: 100%;
+  min-height: 160px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.85rem;
+  border: 1px solid #f2ddd0;
+  border-radius: 6px;
+  padding: 10px 12px;
+  resize: vertical;
+  background: #fff;
+  color: #2e1a0e;
+  line-height: 1.5;
+}
+
+.pdf_css_textarea:focus {
+  outline: none;
+  border-color: #e85d04;
+}
+
+.pdf_css_apply_btn {
+  margin-top: 8px;
+}
+
+/* Print media — hide .no-print elements and pdf_ UI controls when printing */
 @media print {
+  .no-print,
   .pdf_toolbar,
   .pdf_btn,
   .pdf_status,
   .pdf_editor_actions,
-  .pdf_config_panel {
+  .pdf_config_panel,
+  .pdf_css_panel {
     display: none !important;
   }
 }
